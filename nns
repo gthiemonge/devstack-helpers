@@ -1,0 +1,8 @@
+#!/bin/sh
+
+network=$1
+shift
+
+network_id=$(openstack network show -f value -c id $network)
+
+sudo ip netns exec qdhcp-$network_id "$@"

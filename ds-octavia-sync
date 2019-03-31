@@ -1,0 +1,11 @@
+#!/bin/sh
+
+rsync -a --exclude '.git*' /mnt/host/octavia/ /opt/stack/octavia/
+
+if [ $# -gt 0 ]; then
+    for i in $*; do
+        sudo systemctl restart devstack@o-$i
+    done
+else
+    sudo systemctl restart 'devstack@o-*'
+fi

@@ -1,0 +1,9 @@
+#!/bin/sh
+
+amphora_ip=$(openstack loadbalancer amphora list -f value -c lb_network_ip --status READY)
+
+rsync -a --exclude '.git*' /mnt/host/octavia/ centos@$amphora_ip:/home/centos/octavia/
+
+ssh centos@$amphora_ip sudo rsync -a --exclude '.git*' /home/centos/octavia/octavia/ /opt/amphora-agent-venv/lib64/python2.7/site-packages/octavia/
+
+ssh centos@$amphora_ip sudo systemctl restart amphora-agent

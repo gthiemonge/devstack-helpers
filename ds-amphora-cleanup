@@ -1,0 +1,17 @@
+#!/bin/sh
+
+set -x
+
+for server in $(openstack server list --all -f value | grep amphora | cut -d' ' -f1); do
+    openstack server delete $server
+done
+
+mysql -u root -e 'delete from amphora;' octavia
+mysql -u root -e 'update load_balancer set provisioning_status = "ERROR" where provisioning_status = "PENDING_CREATE";' octavia
+mysql -u root -e 'update load_balancer set provisioning_status = "ERROR" where provisioning_status = "PENDING_UPDATE";' octavia
+
+sid=$(sudo journalctl -l | grep 'All attempts to remove security group' | tail -1 | sed 's/.*remove security group \(.*\) have failed.*/\1/')
+pid=$(openstack port list -f value | grep fa:16 | cut -d' ' -f1 | xargs -r -n1 -I{} sh -c 'openstack port show -f yaml {} | grep -q '$sid' && echo {}')
+if [ -n "$pid" ]; then
+    openstack port delete $pid
+fi

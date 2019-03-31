@@ -1,0 +1,16 @@
+#!/bin/sh
+
+set -xe
+
+lbaas2ctl.py unstack
+
+ds-octavia-sync
+sleep 5
+
+ds-amphora-sync
+sleep 5
+
+lbaas2ctl.py stack
+sleep 5
+
+ds-amphora-get-network-config

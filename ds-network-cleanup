@@ -1,0 +1,27 @@
+#!/bin/sh
+
+set -x
+
+regex=vip
+
+openstack floating ip list -f value | cut -d' ' -f1 | xargs -n1 -r openstack floating ip delete
+
+openstack router list -f value | grep $regex | cut -d' ' -f1 | xargs -n1 -r openstack router unset --external-gateway
+
+for router in $(openstack router list -f value | grep $regex | cut -d' ' -f1); do
+    for subnet in $(openstack router show -c interfaces_info  -f value $router | sed -e 's/},/\n/g' | sed -e 's/.*"subnet_id": "\([a-f0-9-]*\)".*/\1/g'); do
+        openstack router remove subnet $router $subnet
+    done
+done
+
+openstack router list -f value | grep $regex | cut -d' ' -f1 | xargs -n1 -r openstack router delete
+
+for network in $(openstack network list -f value | grep $regex | cut -d' ' -f1); do
+
+    for port in $(openstack port list -f value -c ID --network $network); do
+        echo $port
+        openstack port delete $port
+    done
+
+    openstack network delete $network
+done

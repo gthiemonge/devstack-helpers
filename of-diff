@@ -1,0 +1,55 @@
+#!/usr/bin/env python
+
+import sys
+import subprocess
+import re
+import time
+import json
+
+br = sys.argv[1]
+
+keys = ('table', 'priority', 'actions', 'NXST_FLOW', 'cookie', 'ip', 'zone', 'ipv6', 'reg5')
+values = ('n_packets', 'n_bytes')
+skips = ('idle_age', 'duration')
+
+stats = {}
+
+while True:
+    p = subprocess.Popen("ovs-ofctl dump-flows %s" % (br),
+                         shell=True,
+                         stdout=subprocess.PIPE)
+    for l in p.stdout:
+        key = {}
+        value = {}
+        for e in l.strip().split(', '):
+            try:
+                k, v = e.split('=', 1)
+            except:
+                k = e
+                v = None
+            if k in keys:
+                key[k] = v
+            elif k in values:
+                value[k] = int(v)
+            elif k in skips:
+                pass
+            else:
+                pass
+
+        jkey = json.dumps(key)
+        prev_stats = stats.get(jkey, {})
+        diff = False
+        for k in value:
+            if value[k] != prev_stats.get(k, 0):
+                diff = True
+                break
+        if diff:
+            delta = {}
+            for k in value:
+                delta[k] = value[k] - prev_stats.get(k, 0)
+            print key, delta
+        stats[jkey] = value
+
+    print
+
+    time.sleep(1)

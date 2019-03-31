@@ -1,0 +1,5 @@
+#!/bin/sh
+
+amphora_ip=$(openstack loadbalancer amphora list -f value -c lb_network_ip --status ALLOCATED)
+
+ssh centos@$amphora_ip sh -c "'/sbin/ip a; sudo ip -n amphora-haproxy a'"
