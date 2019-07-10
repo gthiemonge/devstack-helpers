@@ -1,0 +1,9 @@
+#!/bin/sh
+
+if [ $# -gt 0 ]; then
+    opts="$*"
+else
+    opts="-f"
+fi
+
+sudo journalctl -l $opts | grep ERROR | grep -v -e ERROR_FOR_DIVISION  -e logging_exception_prefix -e oslo.messaging._drivers.impl_rabbit -e NLMSG_ERROR

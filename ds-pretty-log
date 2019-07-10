@@ -20,6 +20,10 @@ http_response_re = re.compile('HTTP/[12]\.[0-2] (?P<code>[1-5]\d\d)')
 
 error_re = re.compile('\W[Ee]rror')
 
+highlight_re = re.compile('\WGTh\W')
+
+states = ('SUCCESS', 'RUNNING', 'PENDING')
+
 colors = {
     'DEBUG': None,
     'INFO': None,
@@ -27,6 +31,7 @@ colors = {
     'ERROR': 31,
     'FATAL': 31,
 }
+
 styles = {
     'DEBUG': None,
     'INFO': None,
@@ -75,19 +80,33 @@ while True:
             if em:
                 level = 'ERROR'
 
+        line_style = ''
+        hl = highlight_re.search(log)
+        if hl:
+            line_style = '\033[1m'
+
         color_code = ''
         color = colors[level]
         if color is not None:
             style = styles[level]
-            style_code = '%d;' % (style) if style is not None else '0;'
+            if style:
+                style_code = '%d;' % (style)
+            elif len(line_style) == 0:
+                style_code = '0;'
+            else:
+                style_code = ''
+
             color_code = '\033[%s%dm' % (style_code, color)
-        else:
+        elif len(line_style) == 0:
             color_code = '\033[0m'
 
         if hm:
             s = hm.start()
             e = hm.end()
             log = "%s\033[34;1m%s%s%s" % (log[0:s], log[s:e], color_code, log[e:])
+
+        for st in states:
+            log = re.sub("'%s'" % (st), "'\033[35m%s\033[0m'" % (st), log)
 
         rm = http_request_re.search(log)
         if rm:
@@ -96,7 +115,7 @@ while True:
             log = "%s\033[34;1m%s%s%s" % (log[0:s], log[s:e], color_code, log[e:])
 
         line = '%s %s %s[%s]: %s' % (d['date'], d['hostname'], d['service'], d['pid'], log)
-        line = '%s%s%s' % (color_code, line, '\033[0m')
+        line = '%s%s%s%s' % (line_style, color_code, line, '\033[0m')
 
         print(line)
 

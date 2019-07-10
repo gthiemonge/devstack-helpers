@@ -1,0 +1,10 @@
+#!/bin/sh
+
+set -x
+
+amphora_ip=$(openstack loadbalancer amphora list -f value -c lb_network_ip --status ALLOCATED)
+if [ -z "$amphora_ip" ]; then
+    amphora_ip=$(openstack loadbalancer amphora list -f value -c lb_network_ip --status ERROR)
+fi
+
+ssh centos@$amphora_ip sudo journalctl -l -u 'amphora-agent' "$@"

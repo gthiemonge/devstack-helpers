@@ -1,0 +1,24 @@
+#!/bin/sh
+
+#set -x
+
+if [ $(id -u) -ne 0 ]; then
+    sudo $0 "$@"
+    exit 1
+fi
+
+pids=""
+for logfile in octavia-amphora; do
+    if [ -f /var/log/$logfile.log ]; then
+        if echo "$@" | grep -q -- '-f\>'; then
+            tail -f /var/log/$logfile.log &
+            pids="$pids $!"
+        fi
+    fi
+done
+
+if [ -n "$pids" ]; then
+    trap "kill -TERM $pids; exit 0" INT TERM EXIT
+fi
+
+journalctl -l -u 'devstack@o-*' "$@"

@@ -1,0 +1,13 @@
+#!/bin/sh
+
+set -x
+
+status=$1
+
+if [ -z "$status" ]; then
+    status=READY
+fi
+
+for id in $(openstack loadbalancer amphora list -f value -c id --status $status); do
+    openstack loadbalancer amphora failover $id
+done

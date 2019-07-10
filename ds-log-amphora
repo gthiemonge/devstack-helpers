@@ -1,5 +1,0 @@
-#!/bin/sh
-
-amphora_ip=$(openstack loadbalancer amphora list -f value -c lb_network_ip --status READY)
-
-ssh centos@$amphora_ip sudo journalctl -l -u 'amphora-agent' "$@"

@@ -1,0 +1,87 @@
+#!/bin/sh
+
+usage() {
+    echo "$0 [-l] [-i <interval>] [-u <user>] [-n <server_index>] [-x] [-h] [-- command]"
+}
+
+loop=0
+number=1
+user=centos
+
+ssh_args="-q -t -i /etc/octavia/.ssh/octavia_ssh_key"
+
+while [ "$#" -gt 0 ]; do
+    arg=$1
+    case $arg in
+        -l)
+            loop=1
+            ;;
+        -n)
+            number=$2
+            shift
+            ;;
+        -i)
+            interval=$2
+            shift
+            ;;
+        -u)
+            user=$2
+            shift
+            ;;
+        -x)
+            set -x
+            ssh_args=$(echo $ssh_args | sed 's/-q\>//')
+            ;;
+        -h)
+            usage
+            exit 0
+            ;;
+        --)
+            break
+            ;;
+        *)
+            status=$arg
+            ;;
+    esac
+    shift
+done
+
+if [ -z "$status" ]; then
+    status=ALLOCATED
+fi
+
+while true; do
+    id=$(openstack loadbalancer amphora list -f value -c id --status $status | head -n +$number | tail -1)
+    if [ -n "$id" ]; then
+        break
+    fi
+    sleep 1
+done
+
+compute_id=$(openstack loadbalancer amphora show -f value -c compute_id $id)
+
+ip=
+
+for field in $(openstack server show -f value -c addresses -c image $compute_id); do
+    if echo $field | grep -q ubuntu; then
+        user=ubuntu
+    fi
+    if echo $field | grep -q lb-mgmt-net; then
+        ip=$(echo $field | sed 's/lb-mgmt-net=\([0-9.]*\)[;]*$/\1/')
+    fi
+done
+
+if [ "$#" -gt 0 ]; then
+    args="$@"
+else
+    args="-s"
+fi
+
+if [ $loop -eq 1 ]; then
+    while true; do
+        ssh $ssh_args -o ConnectTimeout=5 $user@$ip sudo "$args"
+        sleep $interval
+    done
+else
+    exec ssh $ssh_args $user@$ip sudo "$args"
+fi

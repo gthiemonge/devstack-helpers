@@ -1,0 +1,5 @@
+#!/bin/sh
+
+set -x
+
+rsync -a --exclude '.git*' /mnt/host/octavia-tempest-plugin/octavia_tempest_plugin/ /opt/stack/tempest/.tox/tempest/lib/python2.7/site-packages/octavia_tempest_plugin/

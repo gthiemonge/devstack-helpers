@@ -1,0 +1,90 @@
+#!/usr/bin/env python
+
+from __future__ import print_function
+import sys
+import os
+import time
+import collections
+import openstack
+
+def config_from_env():
+    config = {}
+    for k in ('auth_url', 'project_name', 'username',
+              'password', 'region_name'):
+        v = os.environ.get('OS_%s' % (k.upper()))
+        config[k] = v
+    return config
+
+openstack.enable_logging()
+
+args = sys.argv[1:]
+
+try:
+    server_name = args.pop(0)
+except IndexError:
+    server_name = None
+
+try:
+    port_name = args.pop(0)
+except IndexError:
+    port_name = None
+
+while True:
+
+    conn = openstack.connect(**config_from_env())
+
+    servers = [s for s in conn.compute.servers(all_tenants=True)]
+    project_ids = {s.location['project']['id'] for s in servers}
+    project_ids.add(None)
+
+    networks = {}
+    ports = []
+    for p_id in project_ids:
+        networks.update({n.id: n for n in conn.network.networks(project_id=p_id)})
+        ports.extend([p for p in conn.network.ports(project_id=p_id)])
+
+    selected_ports = []
+
+    for server in servers:
+
+        if server_name and server_name not in server.name:
+            continue
+
+        mac_addresses = []
+        for net in server.addresses:
+            mac_addresses.extend([
+                a['OS-EXT-IPS-MAC:mac_addr']
+                for a in server.addresses[net]
+            ])
+
+        server_ports = {p.mac_address: p for p in ports if p.device_id == server.id}
+        server_ports = {server_ports[m].id: server_ports[m] for m in mac_addresses}
+        server_ports = server_ports.values()
+
+        print(server.name)
+        for p in server_ports:
+            network_name = networks[p.network_id].name
+
+            if port_name:
+                if port_name not in network_name and port_name not in p.name:
+                    continue
+
+            addresses = [a['ip_address'] for a in p.fixed_ips]
+
+            print("  %s %s %s" % (
+                network_name,
+                " ".join(addresses),
+                p.id))
+            print("    tap%s" % (p.id[0:11]))
+            selected_ports.append("tap%s" % (p.id[0:11]))
+
+    if (server_name or port_name) and len(selected_ports) == 1:
+        break
+    if server_name is None and port_name is None:
+        break
+
+    time.sleep(1)
+
+if len(selected_ports) == 1:
+    port = selected_ports[0]
+    os.execvp("sudo", ["sudo", "tcpdump", "-nn", "-i", port] + args)

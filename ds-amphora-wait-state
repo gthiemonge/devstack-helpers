@@ -1,0 +1,17 @@
+#!/bin/sh
+
+set -x
+
+state=$1
+if [ -z "$state" ]; then
+    state=ALLOCATED
+fi
+
+while true; do
+    id=$(openstack loadbalancer amphora list -f value -c id --status $state)
+    if [ -n "$id" ]; then
+        echo $id
+        break
+    fi
+    sleep 1
+done

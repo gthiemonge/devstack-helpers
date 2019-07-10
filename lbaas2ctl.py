@@ -1,11 +1,20 @@
 #!/usr/bin/env python
 
 from __future__ import print_function
-import openstack
+import sys
 import os
 import time
+import collections
 import yaml
-import sys
+import openstack
+
+def dict_representer(dumper, data):
+    return dumper.represent_dict(data.iteritems())
+def unicode_representer(dumper, data):
+    return dumper.represent_str(str(data))
+
+yaml.add_representer(collections.OrderedDict, dict_representer)
+yaml.add_representer(unicode, unicode_representer)
 
 def config_from_env():
     config = {}
@@ -16,90 +25,134 @@ def config_from_env():
     return config
 
 def lbaasv2_print_status(conn):
-    status = {}
+    subnet_names = {}
+    for subnet in conn.network.subnets():
+        if subnet.name != '':
+            subnet_names[subnet.id] = subnet.name
+
+    status = collections.OrderedDict()
 
     try:
         for a in conn.load_balancer.amphorae():
-            a_status = {
-                'vrrp_ip': a.vrrp_ip,
-                'ha_ip': a.ha_ip,
-                'lb_network_ip': a.lb_network_ip,
-                'role': a.role,
-                'status': a.status,
-            }
-            if a.name:
-                a_status['name'] = a.name
+            a_status = collections.OrderedDict([
+                ('id', a.id),
+                ('role', a.role),
+                ('status', a.status),
+                ('vrrp_ip', a.vrrp_ip),
+                ('ha_ip', a.ha_ip),
+                ('lb_network_ip', a.lb_network_ip),
+            ])
             if 'amphorae' not in status:
-                status['amphorae'] = {}
+                status['amphorae'] = collections.OrderedDict()
             status['amphorae'][a.name if a.name else a.id] = a_status
     except openstack.exceptions.HttpException as e:
         pass
 
     for lb in conn.load_balancer.load_balancers():
-        lb_status = {
-            'operating_status': lb.operating_status,
-            'provisioning_status': lb.provisioning_status,
-            'vip_address': lb.vip_address,
-            'vip_port_id': lb.vip_port_id,
-            'vip_subnet_id': lb.vip_subnet_id,
-            'pools': {},
-            'listeners': {}
+        subnet_name = subnet_names.get(lb.vip_subnet_id, None)
+        if subnet_name:
+            subnet_id = "%s (%s)" % (lb.vip_subnet_id,
+                                     subnet_name)
+        else:
+            subnet_id = "%s" % (lb.vip_subnet_id)
+
+        lb_status = collections.OrderedDict([
+            ('id', lb.id),
+            ('operating_status', lb.operating_status),
+            ('provisioning_status', lb.provisioning_status),
+            ('vip_address', lb.vip_address),
+            ('vip_port_id', lb.vip_port_id),
+            ('vip_subnet_id', subnet_id),
+            ('listeners', {}),
+            ('pools', {}),
+            ('statistics', {}),
+        ])
+        stats = conn.load_balancer.get_load_balancer_statistics(lb.id)
+        lb_status['statistics'] = {
+            'total_connections': stats.total_connections,
+            'active_connections': stats.active_connections,
+            'request_errors': stats.request_errors,
+            'bytes_in': stats.bytes_in,
+            'bytes_out': stats.bytes_out,
         }
         for l in lb.listeners:
             listener = conn.load_balancer.get_listener(l['id'])
-            d = {
-                'operating_status': listener.operating_status,
-                'provisioning_status': listener.provisioning_status,
-                'protocol_port': listener.protocol_port,
-                'protocol': listener.protocol,
+            d = collections.OrderedDict([
+                ('id', listener.id),
+                ('operating_status', listener.operating_status),
+                ('provisioning_status', listener.provisioning_status),
+                ('protocol_port', listener.protocol_port),
+                ('protocol', listener.protocol),
+                ('statistics', {}),
+            ])
+            stats = conn.load_balancer.get_listener_statistics(listener.id)
+            d['statistics'] = {
+                'total_connections': stats.total_connections,
+                'active_connections': stats.active_connections,
+                'request_errors': stats.request_errors,
+                'bytes_in': stats.bytes_in,
+                'bytes_out': stats.bytes_out,
             }
-            lb_status['listeners'][listener.name] = d
+            key = listener.name if listener.name else listener.id
+            lb_status['listeners'][key] = d
 
         for p in lb.pools:
             pool = conn.load_balancer.get_pool(p['id'])
-            d = {
-                'operating_status': pool.operating_status,
-                'provisioning_status': pool.provisioning_status,
-                'protocol': pool.protocol,
-                'lb_algorithm': pool.lb_algorithm,
-                'session_persistence': pool.session_persistence,
-                'members': {},
-                'health_monitor': None
-            }
+            d = collections.OrderedDict([
+                ('id', pool.id),
+                ('operating_status', pool.operating_status),
+                ('provisioning_status', pool.provisioning_status),
+                ('protocol', pool.protocol),
+                ('lb_algorithm', pool.lb_algorithm),
+                #('session_persistence', pool.session_persistence),
+                ('members', {}),
+                #('health_monitor', None),
+            ])
 
             if pool.health_monitor_id is not None:
                 hm = conn.load_balancer.get_health_monitor(pool.health_monitor_id)
-                dh = {
-                    'operating_status': hm.operating_status,
-                    'provisioning_status': hm.provisioning_status,
-                    'name': hm.name,
-                    'type': hm.type
-                }
+                dh = collections.OrderedDict([
+                    ('id', hm.id),
+                    ('name', hm.name),
+                    ('operating_status', hm.operating_status),
+                    ('provisioning_status', hm.provisioning_status),
+                    ('type', hm.type),
+                ])
                 d['health_monitor'] = dh
 
             for m in pool.members:
                 member = conn.load_balancer.get_member(m['id'], pool)
-                dm = {
-                    'operating_status': member.operating_status,
-                    'provisioning_status': member.provisioning_status,
-                    'address': member.address,
-                    'protocol_port': member.protocol_port,
-                    'monitor_address': member.monitor_address,
-                    'subnet': member.subnet_id,
-                }
-                k = member.name if member.name != '' else member.id
-                d['members'][k] = dm
+                subnet_name = subnet_names.get(member.subnet_id, None)
+                if subnet_name:
+                    subnet_id = "%s (%s)" % (member.subnet_id,
+                                             subnet_name)
+                else:
+                    subnet_id = "%s" % (member.subnet_id)
+                dm = collections.OrderedDict([
+                    ('id', member.id),
+                    ('operating_status', member.operating_status),
+                    ('provisioning_status', member.provisioning_status),
+                    ('address', member.address),
+                    ('protocol_port', member.protocol_port),
+                    #('monitor_address', member.monitor_address),
+                    ('subnet', subnet_id),
+                ])
+                key = member.name if member.name else member.id
+                d['members'][key] = dm
 
-            lb_status['pools'][pool.name] = d
+            key = pool.name if pool.name else poo.id
+            lb_status['pools'][key] = d
 
         for ip in conn.network.ips(port_id=lb['vip_port_id']):
             lb_status['floating_ip'] = ip.floating_ip_address
 
         if 'loadbalancer' not in status:
-            status['loadbalancer'] = {}
-        status['loadbalancer'][lb.name] = lb_status
+            status['loadbalancer'] = collections.OrderedDict()
 
-    print(yaml.safe_dump(status, default_flow_style=False))
+        key = lb.name if lb.name else lb.id
+        status['loadbalancer'][key] = lb_status
+
+    print(yaml.dump(status, default_flow_style=False))
 
 def wait_for_lb(lb):
     print("Waiting for %s (%s) to be active" % (lb.name, lb.id), end='')
@@ -152,7 +205,7 @@ if action == 'unstack':
 if action != 'stack':
     sys.exit(1)
 
-vip_ip_version = 6
+vip_ip_version = 4
 members_ip_version = 4
 
 subnet = conn.network.find_subnet('ipv%d-vip-subnet' % (vip_ip_version))
@@ -222,16 +275,18 @@ if hm is None:
 
 #for server in sorted(conn.compute.servers(), key=lambda s:s.name):
 for server in conn.compute.servers():
-    private_addr = [a for a in server.addresses.values()[0] if a['version'] == members_ip_version][0]
 
-    network = server.addresses.keys()[0]
-    subnet = conn.network.find_subnet('ipv%d-%s-subnet' % (members_ip_version,
-                                                           network))
+    network = [a for a in server.addresses if a != 'mgmt'][0]
+    private_addr = server.addresses[network][0]
+
+    subnet = conn.network.find_subnet(
+        'ipv%d-%s-subnet' % (
+            private_addr['version'],
+            network))
 
     member = None
     for m in conn.load_balancer.members(pool):
         if m.address == private_addr['addr']:
-            print(m)
             member = m
             break
 
@@ -241,29 +296,29 @@ for server in conn.compute.servers():
             pool,
             subnet_id=subnet.id,
             address=private_addr['addr'],
-            protocol_port=80)
+            protocol_port=8080)
 
         wait_for_lb(lb)
 
-if vip_ip_version == 4:
-    net = conn.network.find_network('public')
-
-    floating_ip_exists = False
-    for _ in conn.network.ips(port_id=lb.vip_port_id):
-        floating_ip_exists = True
-
-    if not floating_ip_exists:
-        ip = None
-        for i in conn.network.ips():
-            if i.port_id is None:
-                ip = i
-                ip = conn.network.update_ip(ip,
-                                            port_id=lb.vip_port_id)
-                break
-        else:
-            ip = conn.network.create_ip(
-                floating_network_id=net.id,
-                port_id=lb.vip_port_id
-            )
+#if vip_ip_version == 4:
+#    net = conn.network.find_network('public')
+#
+#    floating_ip_exists = False
+#    for _ in conn.network.ips(port_id=lb.vip_port_id):
+#        floating_ip_exists = True
+#
+#    if not floating_ip_exists:
+#        ip = None
+#        for i in conn.network.ips():
+#            if i.port_id is None:
+#                ip = i
+#                ip = conn.network.update_ip(ip,
+#                                            port_id=lb.vip_port_id)
+#                break
+#        else:
+#            ip = conn.network.create_ip(
+#                floating_network_id=net.id,
+#                port_id=lb.vip_port_id
+#            )
 
 lbaasv2_print_status(conn)

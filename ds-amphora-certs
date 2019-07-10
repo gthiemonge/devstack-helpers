@@ -1,0 +1,9 @@
+#!/bin/sh
+
+if [ -n "$1" ]; then
+    status=$1
+else
+    status=ALLOCATED
+fi
+
+exec ds-ssh-amphora $status -- openssl x509 -in /etc/octavia/certs/client_ca.pem -text -noout | grep -A2 Validity

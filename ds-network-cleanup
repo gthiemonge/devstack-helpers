@@ -2,7 +2,11 @@
 
 set -x
 
-regex=vip
+if [ -n "$1" ]; then
+    regex=$1
+else
+    regex=vip
+fi
 
 openstack floating ip list -f value | cut -d' ' -f1 | xargs -n1 -r openstack floating ip delete
 

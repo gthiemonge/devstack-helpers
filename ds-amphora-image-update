@@ -1,0 +1,54 @@
+#!/bin/sh
+
+set -xe
+
+branch=
+
+while [ $# -gt 0 ]; do
+    case $1 in
+        -b)
+            branch=$2
+            shift 2
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+case "$1" in
+ubuntu)
+    args="-i ubuntu"
+    ;;
+bionic)
+    args="-i ubuntu -d bionic -s 3"
+    ;;
+fedora)
+    args="-i fedora -s 3"
+    ;;
+centos|*)
+    args="-i centos -s 3"
+    ;;
+esac
+
+cd /mnt/host/octavia/diskimage-create
+
+export DIB_REPOLOCATION_amphora_agent=/mnt/host/octavia
+if [ -z "$branch" ]; then
+    export DIB_REPOREF_amphora_agent=$(git symbolic-ref --short HEAD)
+else
+    export DIB_REPOREF_amphora_agent=$branch
+fi
+
+./diskimage-create.sh $args
+
+old_id=$(openstack image show -f value -c id amphora-x64-haproxy)
+openstack image create \
+              --tag amphora \
+              --project admin \
+              --disk-format qcow2 \
+              --container-format bare \
+              --file amphora-x64-haproxy.qcow2 \
+              amphora-x64-haproxy
+
+openstack image delete $old_id

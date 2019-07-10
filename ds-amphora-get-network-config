@@ -1,5 +1,18 @@
 #!/bin/sh
 
-amphora_ip=$(openstack loadbalancer amphora list -f value -c lb_network_ip --status ALLOCATED)
+#set -x
 
-ssh centos@$amphora_ip sh -c "'/sbin/ip a; sudo ip -n amphora-haproxy a'"
+user=centos
+
+ds-amphora-wait-state ALLOCATED
+
+arg=$1
+
+for amphora_ip in $(openstack loadbalancer amphora list -f value -c lb_network_ip --status ALLOCATED); do
+    echo $amphora_ip
+    if [ "$arg" = "-f" ]; then
+        ssh $user@$amphora_ip sh -c "'find /etc/netns/amphora-haproxy/ -name \"ifcfg*\" -exec sh -c \"echo \# {}; cat {}\" \;'"
+    else
+        ssh $user@$amphora_ip sh -c "'/sbin/ip a; sudo ip -n amphora-haproxy a'"
+    fi
+done

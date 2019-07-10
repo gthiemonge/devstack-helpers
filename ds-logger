@@ -1,0 +1,47 @@
+#!/bin/sh
+
+#set -x
+
+case "$1" in
+start|stop)
+    action=$1
+    ;;
+''|show)
+    action=show
+    ;;
+*)
+    exit 1
+    ;;
+esac
+
+log_state=/tmp/ds-logs.state
+
+if [ -f "$log_state" ]; then
+    pid=$(cut -d' ' -f1 $log_state)
+    logfile=$(cut -d' ' -f2 $log_state)
+else
+    pid=
+    logfile=
+fi
+
+case $action in
+start)
+    if [ -f $logfile ]; then
+        rm -f $logfile
+    fi
+    logfile=$(mktemp)
+    nohup sh -c "ds-octavia-log -f > $logfile" &
+    pid=$!
+    echo "$pid $logfile" > $log_state
+    ;;
+stop)
+    if [ -n "$pid" ]; then
+        kill -TERM $pid
+    fi
+    echo " $logfile" > $log_state
+    ;;
+show)
+    if [ -f "$logfile" ]; then
+        cat $logfile
+    fi
+esac

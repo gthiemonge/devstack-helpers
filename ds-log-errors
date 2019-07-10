@@ -1,3 +1,0 @@
-#!/bin/sh
-
-sudo journalctl -lf | grep ERROR | grep -v -e ERROR_FOR_DIVISION  -e logging_exception_prefix -e oslo.messaging._drivers.impl_rabbit
