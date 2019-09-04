@@ -40,7 +40,7 @@ else
     export DIB_REPOREF_amphora_agent=$branch
 fi
 
-./diskimage-create.sh $args
+./diskimage-create.sh $args -r root
 
 old_id=$(openstack image show -f value -c id amphora-x64-haproxy)
 openstack image create \

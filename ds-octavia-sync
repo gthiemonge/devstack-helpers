@@ -2,7 +2,7 @@
 
 set -x
 
-rsync -a --delete --exclude '.git*' --exclude '*.qcow2' --exclude '.tox' /mnt/host/octavia/ /opt/stack/octavia/
+rsync -av --exclude '.git*' --exclude '*.qcow2' --exclude '.tox' /mnt/host/octavia/ /opt/stack/octavia/
 
 if [ $# -gt 0 ]; then
     for i in $*; do

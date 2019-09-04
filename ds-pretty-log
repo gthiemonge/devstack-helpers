@@ -4,19 +4,20 @@ from __future__ import print_function
 import sys
 import re
 
-log_line_re = re.compile('^(?P<date>\w{3} [0-9 ]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}) '
-                         '(?P<hostname>[a-zA-Z0-9_.-]+) '
-                         '(?P<service>[a-zA-Z0-9_.@-]*)'
-                         '\[(?P<pid>\d+)\]: (?P<log>.*)$')
+log_line_re = re.compile('^(?P<date>(\w{3} [0-9 ]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3})) '
+                         '((?P<hostname>[a-zA-Z0-9_.-]+) '
+                         '(?P<service>[a-zA-Z0-9_.@-]*)(: )?'
+                         '\[(?P<pid>\d+)\]:? )?'
+                         '(?P<file>\[(http://|/)[^\]]*\] )?(?P<log>.*)$')
 
 levels = ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'FATAL')
 
 http_methods = ('GET', 'PUT', 'POST', 'DELETE')
 
-http_request_re = re.compile('(?P<request>(%s) /[^ )]*)' % ("|".join(http_methods)))
+http_request_re = re.compile('(?P<request>"?(%s) /[^ )"]*( HTTP/\d\.\d" [1-5]\d\d)?)' % ("|".join(http_methods)))
 
 http_status_re = re.compile('status: (?P<code>[1-5]\d\d)')
-http_response_re = re.compile('HTTP/[12]\.[0-2] (?P<code>[1-5]\d\d)')
+http_response_re = re.compile('HTTP/[12]\.[0-2]"? (?P<code>[1-5]\d\d)')
 
 error_re = re.compile('\W[Ee]rror')
 
@@ -114,7 +115,10 @@ while True:
             e = rm.end()
             log = "%s\033[34;1m%s%s%s" % (log[0:s], log[s:e], color_code, log[e:])
 
-        line = '%s %s %s[%s]: %s' % (d['date'], d['hostname'], d['service'], d['pid'], log)
+        if isinstance(d['hostname'], str):
+            line = '%s %s %s[%s]: %s' % (d['date'], d['hostname'], d['service'], d['pid'], log)
+        else:
+            line = '%s [%s] %s' % (d['date'], d['file'], log)
         line = '%s%s%s%s' % (line_style, color_code, line, '\033[0m')
 
         print(line)

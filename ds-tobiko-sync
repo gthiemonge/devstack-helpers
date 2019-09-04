@@ -1,0 +1,5 @@
+#!/bin/sh
+
+set -x
+
+rsync -a --exclude '.git*' --exclude '.tox' /mnt/host/opendev/tobiko/ /opt/stack/tobiko/

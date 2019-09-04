@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -x
+
+rsync -a --exclude '.git*' /mnt/host/octavia-dashboard/ /opt/stack/octavia-dashboard/
+
+cd /opt/stack/octavia-dashboard; python manage.py collectstatic --no-input
+
+sudo systemctl restart httpd

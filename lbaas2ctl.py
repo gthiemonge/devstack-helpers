@@ -140,7 +140,7 @@ def lbaasv2_print_status(conn):
                 key = member.name if member.name else member.id
                 d['members'][key] = dm
 
-            key = pool.name if pool.name else poo.id
+            key = pool.name if pool.name else pool.id
             lb_status['pools'][key] = d
 
         for ip in conn.network.ips(port_id=lb['vip_port_id']):

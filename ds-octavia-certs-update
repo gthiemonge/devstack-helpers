@@ -1,0 +1,22 @@
+#!/bin/sh
+
+if [ $(id -u) -ne 0 ]; then
+    exec sudo $0
+    exit 1
+fi
+
+tmpdir=$(mktemp -d)
+
+/opt/stack/octavia/bin/create_certificates.sh $tmpdir /opt/stack/octavia/etc/certificates/openssl.cnf
+
+cp $tmpdir/client.pem /etc/octavia/certs/client.pem
+cp $tmpdir/ca_01.pem /etc/octavia/certs/ca_01.pem
+cp $tmpdir/private/cakey.pem /etc/octavia/certs/private/cakey.pem
+
+systemctl restart devstack@o-cw \
+    devstack@o-hk \
+    devstack@o-hm
+
+rm -rf $tmpdir
+
+exit 0

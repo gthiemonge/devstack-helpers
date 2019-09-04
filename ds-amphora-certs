@@ -6,4 +6,4 @@ else
     status=ALLOCATED
 fi
 
-exec ds-ssh-amphora $status -- openssl x509 -in /etc/octavia/certs/client_ca.pem -text -noout | grep -A2 Validity
+exec ds-amphora-ssh $status -- openssl x509 -in /etc/octavia/certs/client_ca.pem -text -noout | grep -A2 Validity
