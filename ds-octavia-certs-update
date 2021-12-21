@@ -1,22 +1,23 @@
 #!/bin/sh
 
+set -xe
+
 if [ $(id -u) -ne 0 ]; then
     exec sudo $0
     exit 1
 fi
 
-tmpdir=$(mktemp -d)
+cd /opt/stack/octavia/bin/
+./create_dual_intermediate_CA.sh
 
-/opt/stack/octavia/bin/create_certificates.sh $tmpdir /opt/stack/octavia/etc/certificates/openssl.cnf
-
-cp $tmpdir/client.pem /etc/octavia/certs/client.pem
-cp $tmpdir/ca_01.pem /etc/octavia/certs/ca_01.pem
-cp $tmpdir/private/cakey.pem /etc/octavia/certs/private/cakey.pem
+cp dual_ca/etc/octavia/certs/server_ca.key.pem /etc/octavia/certs/private/server_ca.key.pem
+cp dual_ca/etc/octavia/certs/client.cert-and-key.pem /etc/octavia/certs/private/client.cert-and-key.pem
+cp dual_ca/etc/octavia/certs/server_ca.cert.pem /etc/octavia/certs/server_ca.cert.pem
+cp dual_ca/etc/octavia/certs/server_ca-chain.cert.pem /etc/octavia/certs/server_ca-chain.cert.pem
+cp dual_ca/etc/octavia/certs/client_ca.cert.pem /etc/octavia/certs/client_ca.cert.pem
 
 systemctl restart devstack@o-cw \
     devstack@o-hk \
     devstack@o-hm
-
-rm -rf $tmpdir
 
 exit 0

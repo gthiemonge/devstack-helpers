@@ -5,4 +5,4 @@ shift
 
 network_id=$(openstack network show -f value -c id $network)
 
-sudo -E ip netns exec qdhcp-$network_id "$@"
+sudo -E ip netns exec ovnmeta-$network_id "$@"

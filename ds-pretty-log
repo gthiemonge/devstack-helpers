@@ -118,7 +118,7 @@ while True:
         if isinstance(d['hostname'], str):
             line = '%s %s %s[%s]: %s' % (d['date'], d['hostname'], d['service'], d['pid'], log)
         else:
-            line = '%s [%s] %s' % (d['date'], d['file'], log)
+            line = '%s %s' % (d['date'], log)
         line = '%s%s%s%s' % (line_style, color_code, line, '\033[0m')
 
         print(line)

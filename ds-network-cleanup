@@ -13,7 +13,7 @@ openstack floating ip list -f value | cut -d' ' -f1 | xargs -n1 -r openstack flo
 openstack router list -f value | grep $regex | cut -d' ' -f1 | xargs -n1 -r openstack router unset --external-gateway
 
 for router in $(openstack router list -f value | grep $regex | cut -d' ' -f1); do
-    for subnet in $(openstack router show -c interfaces_info  -f value $router | sed -e 's/},/\n/g' | sed -e 's/.*"subnet_id": "\([a-f0-9-]*\)".*/\1/g'); do
+    for subnet in $(openstack router show -c interfaces_info  -f value $router | sed -e 's/},/\n/g' | sed -e "s/.*'subnet_id': '\([a-f0-9-]*\)'.*/\1/g"); do
         openstack router remove subnet $router $subnet
     done
 done

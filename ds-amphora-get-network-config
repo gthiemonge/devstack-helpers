@@ -2,17 +2,19 @@
 
 #set -x
 
-user=centos
+user=cloud-user
 
 ds-amphora-wait-state ALLOCATED
 
 arg=$1
 
+ssh_args="-q -t -i /etc/octavia/.ssh/octavia_ssh_key"
+
 for amphora_ip in $(openstack loadbalancer amphora list -f value -c lb_network_ip --status ALLOCATED); do
     echo $amphora_ip
     if [ "$arg" = "-f" ]; then
-        ssh $user@$amphora_ip sh -c "'find /etc/netns/amphora-haproxy/ -name \"ifcfg*\" -exec sh -c \"echo \# {}; cat {}\" \;'"
+        ssh $ssh_args $user@$amphora_ip sh -c "'find /etc/netns/amphora-haproxy/ -name \"ifcfg*\" -exec sh -c \"echo \# {}; cat {}\" \;'"
     else
-        ssh $user@$amphora_ip sh -c "'/sbin/ip a; sudo ip -n amphora-haproxy a'"
+        ssh $ssh_args $user@$amphora_ip sh -x -c "'/sbin/ip a; sudo ip -n amphora-haproxy a; sudo ip -n amphora-haproxy r; sudo ip -n amphora-haproxy r list table 1; sudo ip -n amphora-haproxy rule list; sudo ip netns exec  amphora-haproxy iptables -t nat -L -nv'"
     fi
 done

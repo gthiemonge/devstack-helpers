@@ -10,6 +10,12 @@ mysql -u root -e 'delete from amphora;' octavia
 mysql -u root -e 'update load_balancer set provisioning_status = "ERROR" where provisioning_status = "PENDING_CREATE";' octavia
 mysql -u root -e 'update load_balancer set provisioning_status = "ERROR" where provisioning_status = "PENDING_UPDATE";' octavia
 mysql -u root -e 'update load_balancer set provisioning_status = "ERROR" where provisioning_status = "PENDING_DELETE";' octavia
+mysql -u root -e 'update listener set provisioning_status = "ERROR" where provisioning_status = "PENDING_CREATE";' octavia
+mysql -u root -e 'update listener set provisioning_status = "ERROR" where provisioning_status = "PENDING_UPDATE";' octavia
+mysql -u root -e 'update listener set provisioning_status = "ERROR" where provisioning_status = "PENDING_DELETE";' octavia
+mysql -u root -e 'update pool set provisioning_status = "ERROR" where provisioning_status = "PENDING_CREATE";' octavia
+mysql -u root -e 'update pool set provisioning_status = "ERROR" where provisioning_status = "PENDING_UPDATE";' octavia
+mysql -u root -e 'update pool set provisioning_status = "ERROR" where provisioning_status = "PENDING_DELETE";' octavia
 
 sid=$(sudo journalctl -l | grep 'All attempts to remove security group' | tail -1 | sed 's/.*remove security group \(.*\) have failed.*/\1/')
 if [ -n "$sid" ]; then
