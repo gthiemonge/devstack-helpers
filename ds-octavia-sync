@@ -1,8 +1,25 @@
 #!/bin/sh
 
-set -x
+set -xe
 
-rsync -av --exclude '.git*' --exclude '*.qcow2' --exclude '.tox' /mnt/host/octavia/ /opt/stack/octavia/
+cd /opt/stack/octavia
+
+remote_dir=$(git remote show origin | grep '^  Fetch URL:' | cut -d: -f2 | tr -d ' ')
+
+if echo $remote_dir | grep -q '^/'; then
+    remote_branch=$(GIT_DIR=$remote_dir/.git git branch | grep '^* ' | cut -c3-)
+    git fetch origin
+    if echo $remote_branch | grep 'no branch'; then
+        sha1=$(GIT_DIR=$remote_dir/.git git log -1 --format=%H)
+        git reset --hard $sha1
+    else
+        git reset --hard origin/$remote_branch
+    fi
+else
+    git pull
+fi
+
+set +e
 
 if [ $# -gt 0 ]; then
     for i in $*; do

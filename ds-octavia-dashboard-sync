@@ -2,8 +2,10 @@
 
 set -x
 
-rsync -a --exclude '.git*' /mnt/host/octavia-dashboard/ /opt/stack/octavia-dashboard/
+rsync -av --exclude '.git*' --exclude '.tox' --exclude node_modules /mnt/host/octavia-dashboard/ /opt/stack/octavia-dashboard/
 
-cd /opt/stack/octavia-dashboard; python manage.py collectstatic --no-input
+cd /opt/stack/octavia-dashboard
+python3 manage.py collectstatic --no-input
+python3 manage.py compress
 
 sudo systemctl restart httpd
