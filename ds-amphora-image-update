@@ -2,6 +2,13 @@
 
 set -xe
 
+#export DIB_HAPROXY_SOURCE_OCTAVIA_HAPROXY_VERSION=2.1.7
+#default_args="-b haproxy-source"
+
+export DIB_OCTAVIA_AMP_USE_NFTABLES=True
+export DIB_REPOLOCATION_octavia_lib=/mnt/host/octavia-lib
+export DIB_REPOREF_octavia_lib=master
+
 branch=
 
 while [ $# -gt 0 ]; do
@@ -16,18 +23,43 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-case "$1" in
-ubuntu)
-    args="-i ubuntu"
+name=$1
+
+case "$name" in
+xenial)
+    args="-i ubuntu -d xenial"
     ;;
 bionic)
     args="-i ubuntu -d bionic -s 3"
+    name=ubuntu
+    ;;
+ubuntu|focal)
+    args="-i ubuntu -d focal -s 3"
+    name=ubuntu
     ;;
 fedora)
     args="-i fedora -s 3"
     ;;
+rhel)
+    args="-i rhel -d 8 -p -s 3"
+    export DIB_LOCAL_IMAGE=/mnt/host/rhel-guest-image-8.1-109.x86_64.qcow2
+    ;;
+centos7)
+    args="-i centos -d 7 -s 3"
+    ;;
+source)
+    args="-i centos -d 8 -s 3 -b haproxy-source"
+    ;;
+centos-stream)
+    args="-i centos -d 8-stream -s 3"
+    ;;
+centos9)
+    args="-i centos -d 9-stream -s 3"
+    name=centos9
+    ;;
 centos|*)
-    args="-i centos -s 3"
+    args="-i $name -d 8-stream -s 3"
+    name=centos8
     ;;
 esac
 
@@ -40,15 +72,26 @@ else
     export DIB_REPOREF_amphora_agent=$branch
 fi
 
-./diskimage-create.sh $args -r root
+./diskimage-create.sh $default_args $args -r root
 
-old_id=$(openstack image show -f value -c id amphora-x64-haproxy)
+image_name=amphora-$name
+
+old_amphora_ids=$(openstack image list -f value -c ID --tag amphora || true)
+old_id=$(openstack image show -f value -c id $image_name || true)
+
 openstack image create \
               --tag amphora \
               --project admin \
               --disk-format qcow2 \
               --container-format bare \
               --file amphora-x64-haproxy.qcow2 \
-              amphora-x64-haproxy
+              --property hw_rng_model=virtio \
+              $image_name
 
-openstack image delete $old_id
+for id in $old_amphora_ids; do
+    openstack image unset --tag amphora $id
+done
+
+if [ -n "$old_id" ]; then
+    openstack image delete $old_id
+fi
