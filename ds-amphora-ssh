@@ -1,87 +1,90 @@
-#!/bin/sh
+#!/usr/bin/env python3
 
-usage() {
-    echo "$0 [-l] [-i <interval>] [-u <user>] [-n <server_index>] [-x] [-h] [-- command]"
-}
+import argparse
+import os
+import subprocess
+import time
 
-loop=0
-number=1
-user=centos
+import openstack
 
-ssh_args="-q -t -i /etc/octavia/.ssh/octavia_ssh_key"
 
-while [ "$#" -gt 0 ]; do
-    arg=$1
-    case $arg in
-        -l)
-            loop=1
-            ;;
-        -n)
-            number=$2
-            shift
-            ;;
-        -i)
-            interval=$2
-            shift
-            ;;
-        -u)
-            user=$2
-            shift
-            ;;
-        -x)
-            set -x
-            ssh_args=$(echo $ssh_args | sed 's/-q\>//')
-            ;;
-        -h)
-            usage
-            exit 0
-            ;;
-        --)
+def config_from_env():
+    config = {}
+    for k in ('auth_url', 'project_name', 'username',
+              'password', 'region_name'):
+        v = os.environ.get('OS_%s' % (k.upper()))
+        config[k] = v
+    return config
+
+
+def amphora_ssh(amphora_index, user, loop, interval, command, status, verbose):
+    conn = openstack.connect(**config_from_env())
+
+    filter = {}
+    if status:
+        filter['status'] = status
+
+    while True:
+        amphorae = list(conn.load_balancer.amphorae(**filter))
+        if len(amphorae) > amphora_index:
+            amphora = amphorae[amphora_index]
+            if verbose:
+                print("Using amphora {}".format(amphora.id))
             break
-            ;;
-        *)
-            status=$arg
-            ;;
-    esac
-    shift
-done
+        if verbose:
+            print("Didn't find any amphorae, retrying in "
+                  "{} second{}.".format(interval,
+                  's' if interval != 1 else ''))
+        time.sleep(interval)
 
-if [ -z "$status" ]; then
-    status=ALLOCATED
-fi
+    compute = conn.compute.get_server(amphora.compute_id)
 
-while true; do
-    id=$(openstack loadbalancer amphora list -f value -c id --status $status | head -n +$number | tail -1)
-    if [ -n "$id" ]; then
-        break
-    fi
-    sleep 1
-done
+    image = conn.image.get_image(compute.image.id)
 
-compute_id=$(openstack loadbalancer amphora show -f value -c compute_id $id)
+    if 'ubuntu' in image.name:
+        user='ubuntu'
 
-ip=
+    address = compute.addresses['lb-mgmt-net'][0]['addr']
 
-for field in $(openstack server show -f value -c addresses -c image $compute_id); do
-    if echo $field | grep -q ubuntu; then
-        user=ubuntu
-    fi
-    if echo $field | grep -q lb-mgmt-net; then
-        ip=$(echo $field | sed 's/lb-mgmt-net=\([0-9.]*\)[;]*$/\1/')
-    fi
-done
+    cmd = ["ssh"]
+    if not verbose:
+        cmd.append("-q")
+    if not loop:
+        cmd.append("-t")
+    cmd.extend(["-i", "/etc/octavia/.ssh/octavia_ssh_key", "-o",
+                "ConnectTimeout=5", "{}@{}".format(user, address),
+                "sudo"])
+    if not command:
+        cmd.append("-s")
+    else:
+        cmd.extend(command)
 
-if [ "$#" -gt 0 ]; then
-    args="$@"
-else
-    args="-s"
-fi
+    print("Command is {}".format(cmd))
+    if not loop:
+        r = os.execvp(cmd[0], cmd)
+    else:
+        while True:
+            p = subprocess.Popen(cmd)
+            p.wait()
+            time.sleep(interval)
 
-if [ $loop -eq 1 ]; then
-    while true; do
-        ssh $ssh_args -o ConnectTimeout=5 $user@$ip sudo "$args"
-        sleep $interval
-    done
-else
-    exec ssh $ssh_args $user@$ip sudo "$args"
-fi
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', dest='interval', type=int, default=1)
+    parser.add_argument('-s', dest='status', type=str)
+    parser.add_argument('-u', dest='user', type=str, default='cloud-user')
+    parser.add_argument('-n', dest='number', type=int, default=0)
+    parser.add_argument('-l', dest='loop', action='store_true')
+    parser.add_argument('-v', dest='verbose', action='store_true')
+    parser.add_argument('cmd', nargs='*')
+
+    args = parser.parse_args()
+
+    amphora_ssh(amphora_index=args.number, user=args.user,
+                loop=args.loop, interval=args.interval,
+                status=args.status, command=args.cmd,
+                verbose=args.verbose)
+
+if __name__ == '__main__':
+    main()
