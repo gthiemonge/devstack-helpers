@@ -8,6 +8,9 @@ import collections
 import yaml
 import openstack
 
+
+verbose = False
+
 def dict_representer(dumper, data):
     return dumper.represent_dict(data.items())
 yaml.add_representer(collections.OrderedDict, dict_representer)
@@ -25,6 +28,7 @@ def config_from_env():
         config[k] = v
     return config
 
+
 def lbaasv2_print_status(conn):
     subnet_names = {}
     for subnet in conn.network.subnets():
@@ -33,7 +37,35 @@ def lbaasv2_print_status(conn):
 
     status = collections.OrderedDict()
 
+    if verbose:
+        print('Get flavor_profile list')
+    for fp in conn.load_balancer.flavor_profiles():
+        if 'flavorprofiles' not in status:
+            status['flavorprofiles'] = collections.OrderedDict()
+        status['flavorprofiles'][fp['id']] = collections.OrderedDict([
+            ('name', fp['name']),
+            ('provider_name', fp['provider_name']),
+            ('flavor_data', fp['flavor_data'].strip()),
+        ])
+    if verbose:
+        print('Get flavor list')
+    for f in conn.load_balancer.flavors():
+        if 'flavors' not in status:
+            status['flavors'] = collections.OrderedDict()
+        fp_name = status['flavorprofiles'][f['flavor_profile_id']].get('name')
+        if fp_name:
+            fp_status = " ({})".format(fp_name)
+        else:
+            fp_status = ""
+        status['flavors'][f['id']] = collections.OrderedDict([
+            ('name', f['name']),
+            ('enabled', f['is_enabled']),
+            ('flavor_profile_id', "%s%s" % (f['flavor_profile_id'], fp_status)),
+        ])
+
     try:
+        if verbose:
+            print('Get amphora list')
         for a in conn.load_balancer.amphorae():
             a_status = collections.OrderedDict([
                 ('id', a.id),
@@ -42,6 +74,8 @@ def lbaasv2_print_status(conn):
                 ('vrrp_ip', a.vrrp_ip),
                 ('ha_ip', a.ha_ip),
                 ('lb_network_ip', a.lb_network_ip),
+                ('vrrp_port_id', a.vrrp_port_id),
+                ('ha_port_id', a.ha_port_id),
             ])
             if 'amphorae' not in status:
                 status['amphorae'] = collections.OrderedDict()
@@ -49,6 +83,8 @@ def lbaasv2_print_status(conn):
     except openstack.exceptions.HttpException as e:
         pass
 
+    if verbose:
+        print('Get load balancer list')
     for lb in conn.load_balancer.load_balancers():
         subnet_name = subnet_names.get(lb.vip_subnet_id, None)
         if subnet_name:
@@ -58,7 +94,7 @@ def lbaasv2_print_status(conn):
             subnet_id = "%s" % (lb.vip_subnet_id)
 
         lb_status = collections.OrderedDict([
-            ('id', lb.id),
+            ('name', lb.name),
             ('operating_status', lb.operating_status),
             ('provisioning_status', lb.provisioning_status),
             ('vip_address', lb.vip_address),
@@ -68,15 +104,17 @@ def lbaasv2_print_status(conn):
             ('pools', {}),
             ('statistics', {}),
         ])
-        stats = conn.load_balancer.get_load_balancer_statistics(lb.id)
-        lb_status['statistics'] = {
-            'total_connections': stats.total_connections,
-            'active_connections': stats.active_connections,
-            'request_errors': stats.request_errors,
-            'bytes_in': stats.bytes_in,
-            'bytes_out': stats.bytes_out,
-        }
+        #stats = conn.load_balancer.get_load_balancer_statistics(lb.id)
+        #lb_status['statistics'] = {
+        #    'total_connections': stats.total_connections,
+        #    'active_connections': stats.active_connections,
+        #    'request_errors': stats.request_errors,
+        #    'bytes_in': stats.bytes_in,
+        #    'bytes_out': stats.bytes_out,
+        #}
         for l in lb.listeners:
+            if verbose:
+                print('Get listener')
             listener = conn.load_balancer.get_listener(l['id'])
             d = collections.OrderedDict([
                 ('id', listener.id),
@@ -84,20 +122,26 @@ def lbaasv2_print_status(conn):
                 ('provisioning_status', listener.provisioning_status),
                 ('protocol_port', listener.protocol_port),
                 ('protocol', listener.protocol),
+                ('connection_limit', listener.connection_limit),
+                ('allowed_cidrs', listener.allowed_cidrs),
+                ('tls_ciphers', listener.tls_ciphers),
+                ('tls_versions', listener.tls_versions),
                 ('statistics', {}),
             ])
-            stats = conn.load_balancer.get_listener_statistics(listener.id)
-            d['statistics'] = {
-                'total_connections': stats.total_connections,
-                'active_connections': stats.active_connections,
-                'request_errors': stats.request_errors,
-                'bytes_in': stats.bytes_in,
-                'bytes_out': stats.bytes_out,
-            }
+            #stats = conn.load_balancer.get_listener_statistics(listener.id)
+            #d['statistics'] = {
+            #    'total_connections': stats.total_connections,
+            #    'active_connections': stats.active_connections,
+            #    'request_errors': stats.request_errors,
+            #    'bytes_in': stats.bytes_in,
+            #    'bytes_out': stats.bytes_out,
+            #}
             key = listener.name if listener.name else listener.id
             lb_status['listeners'][key] = d
 
         for p in lb.pools:
+            if verbose:
+                print('Get pool')
             pool = conn.load_balancer.get_pool(p['id'])
             d = collections.OrderedDict([
                 ('id', pool.id),
@@ -105,6 +149,9 @@ def lbaasv2_print_status(conn):
                 ('provisioning_status', pool.provisioning_status),
                 ('protocol', pool.protocol),
                 ('lb_algorithm', pool.lb_algorithm),
+                ('tls_enabled', pool.tls_enabled),
+                ('tls_ciphers', pool.tls_ciphers),
+                ('tls_versions', pool.tls_versions),
                 #('session_persistence', pool.session_persistence),
                 ('members', {}),
                 #('health_monitor', None),
@@ -150,8 +197,7 @@ def lbaasv2_print_status(conn):
         if 'loadbalancer' not in status:
             status['loadbalancer'] = collections.OrderedDict()
 
-        key = lb.name if lb.name else lb.id
-        status['loadbalancer'][key] = lb_status
+        status['loadbalancer'][lb.id] = lb_status
 
     print(yaml.dump(status, default_flow_style=False))
 
@@ -169,6 +215,9 @@ def wait_for_lb(lb):
     else:
         print(lb)
         raise Exception("")
+
+if '-v' in sys.argv[1:]:
+    verbose = True
 
 openstack.enable_logging()
 
