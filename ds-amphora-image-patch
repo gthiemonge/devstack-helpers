@@ -1,0 +1,40 @@
+#!/bin/sh
+
+set -ex
+
+cd /mnt/host/octavia/diskimage-create
+
+export LIBGUESTFS_BACKEND=direct
+
+virt-customize -a amphora-x64-haproxy.qcow2 \
+    --mkdir /tmp/octavia.git \
+    --copy-in /mnt/host/octavia/.git:/tmp/octavia.git \
+    --delete /opt/octavia \
+    --run-command 'git clone /tmp/octavia.git /opt/octavia' \
+    --run-command '/opt/amphora-agent-venv/bin/pip install -U /opt/octavia' \
+    --delete /opt/octavia \
+    --delete /tmp/octavia.git \
+    --selinux-relabel
+
+name=centos-stream
+image_name=amphora-$name
+
+old_amphora_ids=$(openstack image list -f value -c ID --tag amphora || true)
+old_ids=$(openstack image list -f value -c ID --name $image_name || true)
+
+openstack image create \
+              --tag amphora \
+              --project admin \
+              --disk-format qcow2 \
+              --container-format bare \
+              --file amphora-x64-haproxy.qcow2 \
+              --property hw_rng_model=virtio \
+              $image_name
+
+for id in $old_amphora_ids; do
+    openstack image unset --tag amphora $id
+done
+
+for old_id in $old_ids; do
+    openstack image delete $old_id
+done

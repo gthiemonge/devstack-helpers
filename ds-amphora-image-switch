@@ -1,0 +1,14 @@
+#!/bin/sh
+
+set -xe
+
+name=$1
+
+image_name=amphora-$name
+
+old_amphora_ids=$(openstack image list -f value -c ID --tag amphora)
+for id in $old_amphora_ids; do
+    openstack image unset --tag amphora $id
+done
+
+openstack image set --tag amphora $image_name

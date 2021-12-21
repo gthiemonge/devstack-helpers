@@ -1,0 +1,24 @@
+#!/bin/sh
+
+image_name=$1
+filename=$2
+
+old_amphora_ids=$(openstack image list -f value -c ID --tag amphora || true)
+old_id=$(openstack image show -f value -c id $image_name || true)
+
+openstack image create \
+              --tag amphora \
+              --project admin \
+              --disk-format qcow2 \
+              --container-format bare \
+              --file $filename \
+              --property hw_rng_model=virtio \
+              $image_name
+
+for id in $old_amphora_ids; do
+    openstack image unset --tag amphora $id
+done
+
+if [ -n "$old_id" ]; then
+    openstack image delete $old_id
+fi
