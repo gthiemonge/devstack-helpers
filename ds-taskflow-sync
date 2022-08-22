@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -xe
+
+cd /opt/stack/taskflow
+
+remote_dir=$(git remote show origin | grep '^  Fetch URL:' | cut -d: -f2 | tr -d ' ')
+
+if echo $remote_dir | grep -q '^/'; then
+    remote_branch=$(GIT_DIR=$remote_dir/.git git branch | grep '^* ' | cut -c3-)
+    git fetch origin
+    if echo $remote_branch | grep 'no branch'; then
+        sha1=$(GIT_DIR=$remote_dir/.git git log -1 --format=%H)
+        git reset --hard $sha1
+    else
+        git reset --hard origin/$remote_branch
+    fi
+    GIT_DIR=$remote_dir/.git GIT_WORK_TREE=$remote_dir git diff | patch -p1
+else
+    git pull
+fi
