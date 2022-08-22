@@ -7,12 +7,14 @@ if [ -n "$1" ]; then
 else
     state=READY
 fi
+USER=centos
+
 ds-amphora-wait-state $state
 
 for amphora_ip in $(openstack loadbalancer amphora list -f value -c lb_network_ip --status $state); do
-    rsync -vv -e "ssh -i /etc/octavia/.ssh/octavia_ssh_key" -a --exclude '.git*' --exclude '*.qcow2' --exclude '.tox' /mnt/host/octavia/ cloud-user@$amphora_ip:/home/cloud-user/octavia/
+    rsync -vv -e "ssh -i /etc/octavia/.ssh/octavia_ssh_key" -a --exclude '.git*' --exclude '*.qcow2' --exclude '.tox' /mnt/host/octavia/ $USER@$amphora_ip:/home/$USER/octavia/
 
-    ssh -i /etc/octavia/.ssh/octavia_ssh_key cloud-user@$amphora_ip sudo rsync -a --exclude '.git*' /home/cloud-user/octavia/octavia/ /opt/amphora-agent-venv/lib64/python3.6/site-packages/octavia/
+    ssh -i /etc/octavia/.ssh/octavia_ssh_key $USER@$amphora_ip sudo rsync -a --exclude '.git*' /home/$USER/octavia/octavia/ /opt/amphora-agent-venv/lib64/python3.9/site-packages/octavia/
 
-    ssh -i /etc/octavia/.ssh/octavia_ssh_key cloud-user@$amphora_ip sudo systemctl restart amphora-agent
+    ssh -i /etc/octavia/.ssh/octavia_ssh_key $USER@$amphora_ip sudo systemctl restart amphora-agent
 done
