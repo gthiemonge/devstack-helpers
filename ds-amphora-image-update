@@ -6,8 +6,6 @@ set -xe
 #default_args="-b haproxy-source"
 
 export DIB_OCTAVIA_AMP_USE_NFTABLES=True
-export DIB_REPOLOCATION_octavia_lib=/mnt/host/octavia-lib
-export DIB_REPOREF_octavia_lib=master
 
 branch=
 
@@ -23,7 +21,13 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+export DIB_REPOLOCATION_octavia_lib=/mnt/host/octavia-lib
+export DIB_REPOREF_octavia_lib=${branch:-master}
+
 name=$1
+shift 1
+
+extra_args="$*"
 
 case "$name" in
 xenial)
@@ -48,31 +52,29 @@ centos7)
     args="-i centos -d 7 -s 3"
     ;;
 source)
-    args="-i centos -d 8 -s 3 -b haproxy-source"
+    args="-i centos -d 8-stream -s 3 -b haproxy-source"
     ;;
-centos-stream)
+centos8)
     args="-i centos -d 8-stream -s 3"
-    ;;
-centos9)
-    args="-i centos -d 9-stream -s 3"
     name=centos9
     ;;
 centos|*)
-    args="-i $name -d 8-stream -s 3"
-    name=centos8
+    args="-i centos -d 9-stream -s 3"
+    name=centos-stream
     ;;
 esac
 
-cd /mnt/host/octavia/diskimage-create
+cd /opt/stack/octavia/diskimage-create
 
-export DIB_REPOLOCATION_amphora_agent=/mnt/host/octavia
+export DIB_REPOLOCATION_amphora_agent=/opt/stack/octavia
 if [ -z "$branch" ]; then
     export DIB_REPOREF_amphora_agent=$(git symbolic-ref --short HEAD)
 else
+    args="$args -g ${branch}"
     export DIB_REPOREF_amphora_agent=$branch
 fi
 
-./diskimage-create.sh $default_args $args -r root
+./diskimage-create.sh $default_args $args $extra_args -r root
 
 image_name=amphora-$name
 
