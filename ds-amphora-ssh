@@ -17,12 +17,16 @@ def config_from_env():
     return config
 
 
-def amphora_ssh(amphora_index, user, loop, interval, command, status, verbose):
+def amphora_ssh(load_balancer, amphora_index, user, loop, interval,
+                command, status, verbose):
     conn = openstack.connect(**config_from_env())
 
     filter = {}
     if status:
         filter['status'] = status
+    if load_balancer:
+        lb = conn.load_balancer.find_load_balancer(load_balancer)
+        filter['loadbalancer_id'] = lb['id']
 
     while True:
         amphorae = list(conn.load_balancer.amphorae(**filter))
@@ -73,15 +77,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', dest='interval', type=int, default=1)
     parser.add_argument('-s', dest='status', type=str)
-    parser.add_argument('-u', dest='user', type=str, default='cloud-user')
+    parser.add_argument('-u', dest='user', type=str, default='centos')
     parser.add_argument('-n', dest='number', type=int, default=0)
     parser.add_argument('-l', dest='loop', action='store_true')
     parser.add_argument('-v', dest='verbose', action='store_true')
+    parser.add_argument('--lb', dest='load_balancer', type=str)
     parser.add_argument('cmd', nargs='*')
 
     args = parser.parse_args()
 
-    amphora_ssh(amphora_index=args.number, user=args.user,
+    amphora_ssh(load_balancer=args.load_balancer,
+                amphora_index=args.number, user=args.user,
                 loop=args.loop, interval=args.interval,
                 status=args.status, command=args.cmd,
                 verbose=args.verbose)
