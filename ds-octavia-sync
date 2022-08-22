@@ -15,6 +15,7 @@ if echo $remote_dir | grep -q '^/'; then
     else
         git reset --hard origin/$remote_branch
     fi
+    GIT_DIR=$remote_dir/.git GIT_WORK_TREE=$remote_dir git diff | patch -p1
 else
     git pull
 fi
