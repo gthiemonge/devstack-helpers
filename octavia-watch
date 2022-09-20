@@ -1,0 +1,104 @@
+import os
+import sys
+import time
+
+import openstack
+import keystoneauth1
+
+
+def config_from_env():
+    config = {}
+    for k in ('auth_url', 'project_name', 'username',
+              'password', 'region_name'):
+        v = os.environ.get('OS_%s' % (k.upper()))
+        config[k] = v
+    return config
+
+
+def print_resource(res_type, id, obj):
+    params = " ".join(str(o) or '' for o in obj)
+    print(f"{res_type} {id} {params}")
+
+
+def watch(conn):
+    prev_resources = {}
+
+    while True:
+        resources = {'loadbalancer': {},
+                     'listener': {},
+                     'pool': {},
+                     'health-monitor': {},
+                     'member': {},
+                     'amphora': {}}
+
+        try:
+            for lb in conn.load_balancer.load_balancers():
+                resources['loadbalancer'][lb.id] = (
+                    lb.name,
+                    lb.provisioning_status,
+                    lb.operating_status,
+                    lb.vip_address
+                )
+            for l in conn.load_balancer.listeners():
+                resources['listener'][l.id] = (
+                    l.name,
+                    l.load_balancers[0]['id'],
+                    l.provisioning_status,
+                    l.operating_status,
+                    l.protocol,
+                    l.protocol_port
+                )
+            for p in conn.load_balancer.pools():
+                parent_id = (p.listeners[0]['id']
+                             if p.listeners
+                             else p.load_balancers[0]['id'])
+                resources['pool'][p.id] = (
+                    p.name,
+                    parent_id,
+                    p.provisioning_status,
+                    p.operating_status,
+                    p.protocol
+                )
+                for m in p.members:
+                    member = conn.load_balancer.get_member(m['id'], p)
+                    resources['member'][member.id] = (
+                        member.name,
+                        p.id,
+                        member.provisioning_status,
+                        member.operating_status,
+                        member.address,
+                        member.protocol_port
+                    )
+            for a in conn.load_balancer.amphorae():
+                resources['amphora'][a.id] = (
+                    a.loadbalancer_id,
+                    a.role,
+                    a.status,
+                    a.lb_network_ip,
+                    a.ha_ip,
+                    a.vrrp_ip
+                )
+
+            for res in ('loadbalancer', 'listener', 'pool', 'health-monitor',
+                        'member', 'amphora'):
+                for prev in prev_resources.get(res, {}):
+                    if prev not in resources.get(res, {}):
+                        print(f"{res} {prev} DELETED")
+
+                for obj in resources.get(res, {}):
+                    if (obj not in prev_resources.get(res, {}) or
+                        resources[res][obj] != prev_resources[res][obj]):
+                        print_resource(res, obj, resources[res][obj])
+
+            prev_resources = resources
+        except (keystoneauth1.exceptions.connection.ConnectFailure,
+                openstack.exceptions.HttpException):
+            pass
+
+        time.sleep(1)
+
+openstack.enable_logging()
+
+conn = openstack.connect(**config_from_env())
+
+watch(conn)
